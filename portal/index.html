@@ -596,6 +596,9 @@ main.dash { margin: 0 auto; }
 #chat-compose .chat-row .icon-btn .ic { width: 20px; height: 20px; }
 #chat-compose .chat-row #chat-send { flex: none; min-width: 84px; padding: 0 20px; }
 
+.chat-msg.sending .chat-body { opacity: .55; }
+.chat-msg.sending .chat-tools { display: none !important; }
+
 </style>
 </head>
 <body>
@@ -1176,7 +1179,7 @@ main.dash { margin: 0 auto; }
   }
   function startReply(m) {
     var snip = m.body ? m.body.slice(0, 80) : (m.file_name ? '[' + m.file_name + ']' : '');
-    replying = {id: m.id};
+    replying = {id: m.id, name: m.name, snip: snip};
     $('chat-reply-name').textContent = m.name; $('chat-reply-snip').textContent = snip;
     $('chat-replybar').hidden = false; $('chat-input').focus();
   }
@@ -1187,8 +1190,10 @@ main.dash { margin: 0 auto; }
     el.scrollIntoView({block: 'center', behavior: 'smooth'});
     el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
   }
+  var tempN = 0;
   function render(m) {
     if (log.querySelector('[data-id="' + m.id + '"]')) return;
+    var temp = log.querySelector('[data-real="' + m.id + '"]'); if (temp) temp.remove();   // the real copy of a message shown while sending
     var empty = $('chat-empty'); if (empty) empty.remove();
     var d = day(m.at);
     if (d !== st.lastDay) {
@@ -1246,11 +1251,13 @@ main.dash { margin: 0 auto; }
     if (me && me.mod && !wasMod) { log.replaceChildren(); st.after = 0; st.lastDay = ''; st.lastAuthor = null; }
   }
   function poll() {
-    if (!sb() || st.busy) return Promise.resolve();
+    if (!sb()) return Promise.resolve();
+    if (st.busy) { st.again = true; return Promise.resolve(); }   // a ping mid-fetch: fetch again right after
     st.busy = true;
     var first = st.after === 0;
     return rpc('chat_fetch', {p_after: st.after}).then(function (r) {
       st.busy = false;
+      if (st.again) { st.again = false; setTimeout(poll, 0); }
       var empty = $('chat-empty');
       if (!r.ok) { if (empty) empty.textContent = r.error || 'Chat is offline.'; return; }
       var hadMe = !!st.me;
@@ -1274,17 +1281,24 @@ main.dash { margin: 0 auto; }
       } else if (st.me && st.me.banned) {
         $('chat-error').textContent = 'You are banned from chat.';
       }
-    }, function () { st.busy = false; });
+    }, function () { st.busy = false; st.again = false; });
   }
   function schedule() {
     clearTimeout(st.timer);
-    var wait = st.active && !document.hidden ? 2500 : (st.joined ? 20000 : 0);
+    // with live pings, a slow safety poll; without them, every 1.2 s while the tab is open
+    var wait = st.active && !document.hidden ? (st.live ? 8000 : 1200) : (st.joined ? (st.live ? 60000 : 20000) : 0);
     if (wait) st.timer = setTimeout(function () { poll().then(schedule, schedule); }, wait);
   }
   function start() {
     if (st.started || !sb()) return;
     st.started = true;
     poll().then(function () { showJoin(!st.joined, false); schedule(); });
+    // live updates: the database pings this channel whenever a message lands or is removed
+    try {
+      sb().channel('alware-chat', {config: {broadcast: {self: false}, private: false}})
+        .on('broadcast', {event: 'ping'}, function () { poll().then(schedule); })
+        .subscribe(function (status) { var up = status === 'SUBSCRIBED'; if (up !== !!st.live) { st.live = up; schedule(); } });
+    } catch (e) { st.live = false; }
   }
   function opened() {
     st.active = true; setUnread(0);
@@ -1527,8 +1541,18 @@ main.dash { margin: 0 auto; }
       });
       return;
     }
-    var send = $('chat-send'); send.disabled = true;
-    var item = pending;
+    var send = $('chat-send');
+    var item = pending, reply = replying, temp = null;
+    if (!item && st.me) {
+      // show it straight away; the real message replaces it when it comes back
+      var tid = 'tmp' + (++tempN);
+      render({id: tid, author: st.me.id, key: st.me.key, name: st.me.name, mod: st.me.mod, at: Date.now() / 1000, body: text,
+              reply_to: reply ? reply.id : null, reply_name: reply ? reply.name : null, reply_body: reply ? reply.snip : null});
+      temp = log.querySelector('[data-id="' + tid + '"]');
+      if (temp) temp.classList.add('sending');
+      log.scrollTop = log.scrollHeight;
+      input.value = ''; cancelReply(); err.textContent = '';
+    } else send.disabled = true;
     var upload = !item ? Promise.resolve({ok: true, ticket: null}) :
       rpc('chat_upload', {}).then(function (t) {
         if (!t.ok) return t;
@@ -1540,13 +1564,26 @@ main.dash { margin: 0 auto; }
     upload.then(function (t) {
       if (!t.ok) return t;
       var args = {p_body: text, p_file: t.ticket};
-      if (replying) args.p_reply = replying.id;   // only when replying, so plain messages also work before the database update
+      if (reply) args.p_reply = reply.id;   // only when replying, so plain messages also work before the database update
       return rpc('chat_send', args);
     }).then(function (r) {
       send.disabled = false; send.textContent = 'Send';
-      if (!r.ok) { err.textContent = r.error || 'Could not send.'; return; }
-      err.textContent = ''; input.value = ''; setPending(null); cancelReply();
+      if (!r || !r.ok) {
+        err.textContent = (r && r.error) || 'Could not send.';
+        if (temp) {
+          temp.remove();
+          if (!input.value) input.value = text;    // nothing lost: the text goes back in the box
+          if (reply && !replying) startReply({id: reply.id, name: reply.name, body: reply.snip});
+        }
+        return;
+      }
+      if (!temp) { err.textContent = ''; input.value = ''; setPending(null); cancelReply(); }
+      else if (r.id == null || log.querySelector('[data-id="' + r.id + '"]')) temp.remove();
+      else temp.dataset.real = r.id;
       poll().then(function () { log.scrollTop = log.scrollHeight; });
+    }, function () {
+      send.disabled = false; send.textContent = 'Send'; err.textContent = 'Could not send.';
+      if (temp) { temp.remove(); if (!input.value) input.value = text; }
     });
   });
   // start once signed in (the account row appears then), for the unread dot
