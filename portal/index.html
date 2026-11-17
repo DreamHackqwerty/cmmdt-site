@@ -536,6 +536,31 @@ main.dash { margin: 0 auto; }
 .chat-card.dragging .chat-drop { display: grid; }
 #chat-attach { flex: none; }
 
+/* chat replies and @mentions */
+.chat-quote { display: flex; align-items: center; gap: 6px; max-width: 100%; margin: 2px 0 2px; padding: 0; border: 0; background: none; cursor: pointer;
+  font-size: 12.5px; color: var(--muted); text-align: left; }
+.chat-quote::before { content: ""; flex: none; width: 16px; height: 9px; border: 2px solid var(--line); border-right: 0; border-bottom: 0; border-radius: 7px 0 0 0; margin-top: 6px; }
+.chat-quote b { color: var(--fg); font-weight: 600; flex: none; }
+.chat-quote span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-quote:hover span { color: var(--fg); }
+.chat-quote:hover { transform: none; }
+.chat-mention { padding: 0 4px; border-radius: 5px; font-weight: 600; color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.chat-mention.me { color: #1b1203; background: #f5c84a; }
+.chat-msg.mentioned { background: rgba(245, 200, 74, .08); box-shadow: inset 2px 0 0 #f5c84a; }
+.chat-msg.flash { animation: chatFlash 1.2s ease-out; }
+@keyframes chatFlash { 0%, 30% { background: color-mix(in srgb, var(--accent) 28%, transparent); } 100% { background: transparent; } }
+.chat-replybar { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; padding: 6px 6px 6px 12px; border-radius: 10px; font-size: 13px; color: var(--muted);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.chat-replybar[hidden] { display: none; }
+.chat-replybar-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-replybar b { color: var(--fg); }
+.chat-compose { position: relative; }
+.chat-mentions { position: absolute; left: 70px; bottom: calc(100% - 12px); z-index: 5; min-width: 200px; max-width: 300px; padding: 4px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--surface); box-shadow: 0 12px 30px rgba(0,0,0,.5); }
+.chat-mentions[hidden] { display: none; }
+.chat-mentions button { display: block; width: 100%; padding: 7px 10px; border: 0; border-radius: 7px; background: none; color: var(--fg); text-align: left; font-size: 13px; font-weight: 600; }
+.chat-mentions button.on, .chat-mentions button:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); transform: none; }
+
 </style>
 </head>
 <body>
@@ -814,6 +839,11 @@ main.dash { margin: 0 auto; }
                   </div>
                 </div>
               </div>
+              <div class="chat-replybar" id="chat-replybar" hidden>
+                <span class="chat-replybar-text">Replying to <b id="chat-reply-name"></b> <span id="chat-reply-snip"></span></span>
+                <button type="button" class="icon-btn ghost" id="chat-reply-x" aria-label="Cancel reply" title="Cancel reply">×</button>
+              </div>
+              <div class="chat-mentions" id="chat-mentions" role="listbox" aria-label="Mention someone" hidden></div>
               <div class="chat-row">
                 <input type="file" id="chat-file" hidden accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain,.log,application/zip,video/mp4,video/quicktime">
                 <button type="button" class="icon-btn" id="chat-attach" title="Attach a file or image (or paste one)" aria-label="Attach a file"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>
@@ -1059,6 +1089,47 @@ main.dash { margin: 0 auto; }
     $('chat-pending').hidden = false;
     $('chat-input').focus();
   }
+  // replies and @mentions
+  var names = {};        // lower-case name -> name, everyone seen in this chat
+  var replying = null;   // {id, name, snip}
+  function learn(n) { if (n) names[n.toLowerCase()] = n; }
+  function mentionAt(text, i) {
+    var rest = text.slice(i + 1).toLowerCase(), best = null;
+    Object.keys(names).forEach(function (n) {
+      if (rest.slice(0, n.length) === n && !/[A-Za-z0-9_]/.test(rest.charAt(n.length)) && (!best || n.length > best.length)) best = n;
+    });
+    return best ? names[best] : null;
+  }
+  function bodyNodes(text) {
+    var frag = document.createDocumentFragment(), from = 0, me = false;
+    var myName = st.me && st.me.name ? st.me.name.toLowerCase() : null;
+    for (var i = 0; i < text.length; i++) {
+      if (text.charAt(i) !== '@' || (i > 0 && !/\s/.test(text.charAt(i - 1)))) continue;
+      var n = mentionAt(text, i);
+      if (!n) continue;
+      if (i > from) frag.appendChild(document.createTextNode(text.slice(from, i)));
+      var tag = document.createElement('span'); tag.className = 'chat-mention';
+      tag.textContent = text.slice(i, i + 1 + n.length);
+      if (myName && n.toLowerCase() === myName) { tag.classList.add('me'); me = true; }
+      frag.appendChild(tag);
+      from = i + 1 + n.length; i = from - 1;
+    }
+    if (from < text.length) frag.appendChild(document.createTextNode(text.slice(from)));
+    return {nodes: frag, mentionsMe: me};
+  }
+  function startReply(m) {
+    var snip = m.body ? m.body.slice(0, 80) : (m.file_name ? '[' + m.file_name + ']' : '');
+    replying = {id: m.id};
+    $('chat-reply-name').textContent = m.name; $('chat-reply-snip').textContent = snip;
+    $('chat-replybar').hidden = false; $('chat-input').focus();
+  }
+  function cancelReply() { replying = null; $('chat-replybar').hidden = true; }
+  function jumpTo(id) {
+    var el = log.querySelector('[data-id="' + id + '"]');
+    if (!el) return;
+    el.scrollIntoView({block: 'center', behavior: 'smooth'});
+    el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+  }
   function render(m) {
     if (log.querySelector('[data-id="' + m.id + '"]')) return;
     var empty = $('chat-empty'); if (empty) empty.remove();
@@ -1075,27 +1146,40 @@ main.dash { margin: 0 auto; }
     st.lastAuthor = who; st.lastAt = m.at;
     var meta = document.createElement('div'); meta.className = 'chat-meta';
     var name = document.createElement('span'); name.className = 'chat-name'; name.textContent = m.name; meta.appendChild(name);
+    learn(m.name); row.dataset.key = who;
     if (m.mod) { var b = document.createElement('span'); b.className = 'chat-badge'; b.textContent = 'MOD'; meta.appendChild(b); }
     var t = document.createElement('span'); t.className = 'chat-time'; t.textContent = clock(m.at); meta.appendChild(t);
-    var body = document.createElement('div'); body.className = 'chat-body'; body.textContent = m.body; body.title = clock(m.at);
+    var body = document.createElement('div'); body.className = 'chat-body'; body.title = clock(m.at);
+    var parsed = bodyNodes(m.body || ''); body.appendChild(parsed.nodes);
     row.appendChild(meta);
+    if (m.reply_to) {
+      var q = document.createElement('button'); q.type = 'button'; q.className = 'chat-quote'; q.title = 'Show the message this replies to';
+      var qn = document.createElement('b'); qn.textContent = m.reply_gone ? 'Deleted message' : (m.reply_name || 'Message');
+      var qs = document.createElement('span'); qs.textContent = m.reply_gone ? '' : (m.reply_body || (m.reply_file ? 'Attachment' : ''));
+      q.appendChild(qn); q.appendChild(qs); q.onclick = function () { jumpTo(m.reply_to); };
+      row.appendChild(q); row.classList.remove('cont');
+      var original = log.querySelector('[data-id="' + m.reply_to + '"]');
+      if (!mine && st.me && ((original && original.dataset.key === st.me.key) || (!original && m.reply_name === st.me.name))) parsed.mentionsMe = true;
+    }
+    if (parsed.mentionsMe && !mine) row.classList.add('mentioned');
     if (m.body) row.appendChild(body);
     if (m.file_path) row.appendChild(attachment(m));
+    var tools = document.createElement('div'); tools.className = 'chat-tools';
+    tools.appendChild(tool('Reply', '', function () { if (st.joined) startReply(m); }));
     if (st.me && st.me.mod) {
-      var tools = document.createElement('div'); tools.className = 'chat-tools';
       tools.appendChild(tool('Delete', '', function () { mod('delete', m.id); }));
       if (!mine && !m.mod) {
         tools.appendChild(tool('Mute 10 min', '', function () { mod('mute', m.author, 10); }));
         tools.appendChild(tool('Ban', 'danger', function () { mod('ban', m.author, null, this); }));
       }
-      row.appendChild(tools);
     }
+    if (st.joined) row.appendChild(tools);
     log.appendChild(row);
   }
   function applyMe(me) {
     var wasMod = st.me && st.me.mod;
     st.me = me || null;
-    if (me) { st.joined = true; $('chat-me').textContent = me.name; }
+    if (me) { st.joined = true; $('chat-me').textContent = me.name; learn(me.name); }
     if (me && me.mod && !wasMod) { log.replaceChildren(); st.after = 0; st.lastDay = ''; st.lastAuthor = null; }
   }
   function poll() {
@@ -1165,6 +1249,45 @@ main.dash { margin: 0 auto; }
   $('chat-attach').onclick = function () { $('chat-file').click(); };
   $('chat-file').onchange = function () { if (this.files[0]) setPending(this.files[0]); };
   $('chat-pending-x').onclick = function () { setPending(null); };
+  $('chat-reply-x').onclick = cancelReply;
+  (function () {   // @ autocomplete from the names seen in the chat
+    var input = $('chat-input'), box = $('chat-mentions'), items = [], pick = 0, token = null;
+    function close() { box.hidden = true; items = []; token = null; }
+    function choose(n) {
+      if (!token) return;
+      var v = input.value;
+      input.value = v.slice(0, token.start) + '@' + n + ' ' + v.slice(token.end);
+      var caret = token.start + n.length + 2; input.setSelectionRange(caret, caret);
+      close(); input.focus();
+    }
+    function update() {
+      var caret = input.selectionStart, before = input.value.slice(0, caret);
+      var m = /(^|\s)@([^@]{0,20})$/.exec(before);
+      if (!m) { close(); return; }
+      var q = m[2].toLowerCase(), me = st.me && st.me.name ? st.me.name.toLowerCase() : '';
+      items = Object.keys(names).filter(function (n) { return n !== me && n.indexOf(q) === 0; }).sort().slice(0, 6).map(function (n) { return names[n]; });
+      if (!items.length) { close(); return; }
+      token = {start: caret - m[2].length - 1, end: caret}; pick = Math.min(pick, items.length - 1);
+      box.replaceChildren();
+      items.forEach(function (n, i) {
+        var b = document.createElement('button'); b.type = 'button'; b.textContent = '@' + n; b.setAttribute('role', 'option');
+        if (i === pick) b.classList.add('on');
+        b.onmousedown = function (e) { e.preventDefault(); choose(n); };
+        box.appendChild(b);
+      });
+      box.hidden = false;
+    }
+    input.addEventListener('input', function () { pick = 0; update(); });
+    input.addEventListener('click', update);
+    input.addEventListener('blur', function () { setTimeout(close, 120); });
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && box.hidden && replying) { e.preventDefault(); cancelReply(); return; }
+      if (box.hidden) return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); pick = (pick + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length; update(); }
+      else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); choose(items[pick]); }
+      else if (e.key === 'Escape') { e.preventDefault(); close(); }
+    });
+  })();
   function previewPending() { if (pending && pending.url) view(pending.url, pending.name, null); }
   $('chat-pending-view').onclick = previewPending;
   $('chat-pthumb').onclick = previewPending;
@@ -1230,11 +1353,13 @@ main.dash { margin: 0 auto; }
       });
     upload.then(function (t) {
       if (!t.ok) return t;
-      return rpc('chat_send', {p_body: text, p_file: t.ticket});
+      var args = {p_body: text, p_file: t.ticket};
+      if (replying) args.p_reply = replying.id;   // only when replying, so plain messages also work before the database update
+      return rpc('chat_send', args);
     }).then(function (r) {
       send.disabled = false; send.textContent = 'Send';
       if (!r.ok) { err.textContent = r.error || 'Could not send.'; return; }
-      err.textContent = ''; input.value = ''; setPending(null);
+      err.textContent = ''; input.value = ''; setPending(null); cancelReply();
       poll().then(function () { log.scrollTop = log.scrollHeight; });
     });
   });
