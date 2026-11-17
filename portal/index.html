@@ -537,12 +537,15 @@ main.dash { margin: 0 auto; }
 #chat-attach { flex: none; }
 
 /* chat replies and @mentions */
-.chat-quote { display: flex; align-items: center; gap: 6px; max-width: 100%; margin: 2px 0 2px; padding: 0; border: 0; background: none; cursor: pointer;
+.chat-quote { position: relative; display: flex; align-items: center; gap: 7px; max-width: 100%; margin: 0 0 4px; padding: 0 0 0 30px; border: 0; background: none; cursor: pointer;
   font-size: 12.5px; color: var(--muted); text-align: left; }
-.chat-quote::before { content: ""; flex: none; width: 16px; height: 9px; border: 2px solid var(--line); border-right: 0; border-bottom: 0; border-radius: 7px 0 0 0; margin-top: 6px; }
-.chat-quote b { color: var(--fg); font-weight: 600; flex: none; }
-.chat-quote span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.chat-quote:hover span { color: var(--fg); }
+.chat-quote::before { content: ""; position: absolute; left: 6px; top: 50%; width: 18px; height: 12px; border: 2px solid var(--line); border-right: 0; border-bottom: 0; border-radius: 8px 0 0 0; }
+.chat-quote b { flex: none; color: var(--accent); font-weight: 600; opacity: .8; }
+.chat-quote span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--fg); opacity: .75; }
+.chat-quote span.att { font-style: italic; }
+.chat-quote i { color: var(--muted); }
+.chat-quote:hover b, .chat-quote:hover span { opacity: 1; }
+.chat-quote:hover::before { border-color: var(--muted); }
 .chat-quote:hover { transform: none; }
 .chat-mention { padding: 0 4px; border-radius: 5px; font-weight: 600; color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
 .chat-mention.me { color: #1b1203; background: #f5c84a; }
@@ -1154,10 +1157,16 @@ main.dash { margin: 0 auto; }
     row.appendChild(meta);
     if (m.reply_to) {
       var q = document.createElement('button'); q.type = 'button'; q.className = 'chat-quote'; q.title = 'Show the message this replies to';
-      var qn = document.createElement('b'); qn.textContent = m.reply_gone ? 'Deleted message' : (m.reply_name || 'Message');
-      var qs = document.createElement('span'); qs.textContent = m.reply_gone ? '' : (m.reply_body || (m.reply_file ? 'Attachment' : ''));
-      q.appendChild(qn); q.appendChild(qs); q.onclick = function () { jumpTo(m.reply_to); };
-      row.appendChild(q); row.classList.remove('cont');
+      if (m.reply_gone) {
+        var qd = document.createElement('i'); qd.textContent = 'Original message was deleted'; q.appendChild(qd);
+      } else {
+        var qn = document.createElement('b'); qn.textContent = '@' + (m.reply_name || 'someone');
+        var qs = document.createElement('span'); qs.textContent = m.reply_body || (m.reply_file ? 'Click to see attachment' : '');
+        if (!m.reply_body && m.reply_file) qs.className = 'att';
+        q.appendChild(qn); q.appendChild(qs);
+      }
+      q.onclick = function () { jumpTo(m.reply_to); };
+      row.insertBefore(q, meta); row.classList.remove('cont');
       var original = log.querySelector('[data-id="' + m.reply_to + '"]');
       if (!mine && st.me && ((original && original.dataset.key === st.me.key) || (!original && m.reply_name === st.me.name))) parsed.mentionsMe = true;
     }
