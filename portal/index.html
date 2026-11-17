@@ -589,6 +589,13 @@ main.dash { margin: 0 auto; }
 .chat-ep-foot-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; color: var(--fg); }
 .chat-ep-foot-tip { font-size: 11px; color: var(--muted); }
 
+/* compose row: every control the same height, centred, same corners */
+#chat-compose .chat-row { align-items: stretch; gap: 8px; }
+#chat-compose .chat-row > * { height: 46px; margin: 0; box-sizing: border-box; border-radius: 12px; }
+#chat-compose .chat-row .icon-btn { flex: none; width: 46px; display: grid; place-items: center; padding: 0; }
+#chat-compose .chat-row .icon-btn .ic { width: 20px; height: 20px; }
+#chat-compose .chat-row #chat-send { flex: none; min-width: 84px; padding: 0 20px; }
+
 </style>
 </head>
 <body>
