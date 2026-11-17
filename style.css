@@ -430,3 +430,11 @@ main,.panel{min-width:0}
 .skip{position:fixed;top:8px;left:8px;z-index:100;transform:translateY(-160%);padding:10px 16px;background:var(--fg);color:var(--bg);border-radius:8px}
 .skip:focus{transform:none}
 @media(max-width:400px){.foot-links{gap:12px}.people{grid-template-columns:1fr}}
+
+/* Fission Front: a fifth tile and the game's ember accent */
+.c-ember { --c: #ff8a3d; }
+@media (min-width: 1101px) { .dock { grid-template-columns: repeat(5, 1fr); } }
+@media (min-width: 901px) and (max-width: 1100px) { .dock { grid-template-columns: repeat(3, 1fr); } }
+.btn.play-now { padding: 14px 34px; font-size: 16px; font-weight: 600; background: #ff8a3d; border-color: #ff8a3d; color: #1a1006;
+  box-shadow: 0 14px 36px -12px rgb(255 138 61 / .7); }
+.btn.play-now:hover { background: #ff9d5c; border-color: #ff9d5c; }
