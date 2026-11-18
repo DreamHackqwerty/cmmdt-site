@@ -641,6 +641,14 @@ main.dash { margin: 0 auto; }
 .chat-msg .chat-name { color: hsl(var(--who-h, 220) 75% 74%) !important; }
 .chat-msg.chat-system .chat-avatar { background: color-mix(in srgb, var(--accent) 45%, transparent); }
 
+/* the chat card keeps one height: the message list gives up room to an attachment, reply or warning */
+.chat-card { display: flex; flex-direction: column; height: calc(100vh - 200px); min-height: 460px; }
+.chat-card > .card-head, .chat-card > .chat-join, .chat-card > .chat-compose { flex: none; }
+.chat-card > .chat-log { flex: 1 1 auto; height: auto !important; min-height: 140px; }
+.chat-pthumb { width: 180px; height: 100px; }
+.chat-pcard { max-width: 200px; }
+@media (max-width: 640px) { .chat-card { height: calc(100vh - 150px); } }
+
 </style>
 </head>
 <body>
@@ -1074,6 +1082,10 @@ main.dash { margin: 0 auto; }
   if (!panel) return;
   var $ = function (id) { return document.getElementById(id); };
   var log = $('chat-log');
+  // when the list gets shorter (an attachment, reply or warning above the box), keep the newest messages in view
+  var logAtBottom = true;
+  log.addEventListener('scroll', function () { logAtBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40; });
+  if (window.ResizeObserver) new ResizeObserver(function () { if (logAtBottom) log.scrollTop = log.scrollHeight; }).observe(log);
   var st = {after: 0, me: null, joined: false, active: false, unread: 0, busy: false, timer: null, lastAuthor: null, lastAt: 0, lastDay: '', started: false};
   function sb() { return window.portalSb; }
   function rpc(name, args) {
