@@ -6,7 +6,8 @@
   <meta name="theme-color" content="#08090d">
   <title>ALware Portal | CMMDT</title>
   <meta name="description" content="Log every fish ALware lands, see hourly reports and watch your macro live.">
-  <link rel="icon" type="image/png" sizes="512x512" href="/favicon-512.png">
+  <link rel="icon" type="image/png" href="/assets/brand-mark.png">
+  <link rel="apple-touch-icon" href="/assets/brand-mark.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
   <style>
@@ -653,6 +654,9 @@ main.dash { margin: 0 auto; }
 .side-nav a .mention-count { margin-left: auto; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; display: inline-grid; place-items: center;
   background: #f23f43; color: #fff; font-size: 11px; font-weight: 700; line-height: 1; font-style: normal; }
 .side-nav a .mention-count[hidden] { display: none; }
+
+/* the message you're replying to */
+.chat-msg.reply-target { background: rgba(245, 200, 74, .12) !important; box-shadow: inset 3px 0 0 #f5c84a; }
 
 </style>
 </head>
@@ -1479,10 +1483,16 @@ main.dash { margin: 0 auto; }
   function startReply(m) {
     var snip = m.body ? m.body.slice(0, 80) : (m.file_name ? '[' + m.file_name + ']' : '');
     replying = {id: m.id, name: m.name, snip: snip};
+    markReplyTarget(m.id);
     $('chat-reply-name').textContent = m.name; $('chat-reply-snip').textContent = snip;
     $('chat-replybar').hidden = false; $('chat-input').focus();
   }
-  function cancelReply() { replying = null; $('chat-replybar').hidden = true; }
+  function markReplyTarget(id) {
+    // the message you're answering stays lit, like Discord
+    var was = log.querySelector('.chat-msg.reply-target'); if (was) was.classList.remove('reply-target');
+    var el = id != null && log.querySelector('[data-id="' + id + '"]'); if (el) { el.classList.add('reply-target'); setTimeout(function () { el.scrollIntoView({block: 'nearest', behavior: 'smooth'}); }, 30); }
+  }
+  function cancelReply() { replying = null; $('chat-replybar').hidden = true; markReplyTarget(null); }
   function jumpTo(id) {
     var el = log.querySelector('[data-id="' + id + '"]');
     if (!el) return;
