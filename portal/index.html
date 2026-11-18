@@ -661,6 +661,19 @@ main.dash { margin: 0 auto; }
 .chat-msg.mentioned { background: rgba(240, 178, 50, .14); box-shadow: inset 3px 0 0 #f0b232; }
 .chat-msg.mentioned:hover { background: rgba(240, 178, 50, .19); }
 
+/* the hover toolbar: icon buttons in a small pill, with tooltips (like Discord) */
+.chat-tools { top: -16px; right: 12px; gap: 0; padding: 3px; border-radius: 10px; z-index: 3; border: 1px solid var(--line); background: var(--surface); box-shadow: 0 6px 18px rgba(0,0,0,.45); }
+.chat-tools button.chat-icon-tool { position: relative; display: grid; place-items: center; width: 32px; height: 30px; padding: 0; border: 0; border-radius: 7px; background: none; color: var(--muted); }
+.chat-tools button.chat-icon-tool svg { width: 18px; height: 18px; }
+.chat-tools button.chat-icon-tool:hover { background: color-mix(in srgb, var(--fg) 9%, transparent); color: var(--fg); transform: none; }
+.chat-tools button.chat-icon-tool.danger { color: #f38b8b; }
+.chat-tools button.chat-icon-tool.danger:hover, .chat-tools button.armed { background: #c43c3c; color: #fff; }
+.chat-tools button.chat-icon-tool::after { content: attr(data-tip); position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+  padding: 5px 9px; border-radius: 7px; background: #0b0e16; color: #fff; font-size: 12px; font-weight: 600; white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0,0,0,.5); opacity: 0; pointer-events: none; transition: opacity .1s; }
+.chat-tools button.chat-icon-tool:hover::after { opacity: 1; }
+.chat-tools button.chat-icon-tool:last-child::after { left: auto; right: 0; transform: none; }
+
 </style>
 </head>
 <body>
@@ -952,7 +965,7 @@ main.dash { margin: 0 auto; }
               <div class="chat-mentions" id="chat-mentions" role="listbox" aria-label="Mention someone" hidden></div>
               <div class="chat-row">
                 <input type="file" id="chat-file" hidden accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain,.log,application/zip">
-                <button type="button" class="icon-btn" id="chat-attach" title="Attach a file or image (or paste one)" aria-label="Attach a file"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>
+                <button type="button" class="icon-btn" id="chat-attach" title="Attach a file or image (or paste one)" aria-label="Attach a file"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m17 8-5-5-5 5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/></svg></button>
                 <input id="chat-input" maxlength="300" autocomplete="off" placeholder="Message everyone">
                 <button type="button" class="icon-btn" id="chat-emoji-btn" title="Emoji" aria-label="Emoji" aria-expanded="false"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></button>
                 <button type="submit" class="small primary" id="chat-send">Send</button>
@@ -1155,12 +1168,13 @@ main.dash { margin: 0 auto; }
     return d.toLocaleDateString([], {month: 'short', day: 'numeric'});
   }
   function tool(label, cls, fn) {
-    var b = document.createElement('button'); b.type = 'button'; b.className = 'small' + (cls ? ' ' + cls : ''); b.textContent = label; b.onclick = fn; return b;
+    var b = document.createElement('button'); b.type = 'button'; b.className = 'small' + (cls ? ' ' + cls : ''); b.onclick = fn;
+    return chatIconTool(b, label);
   }
   function mod(action, target, minutes, button) {
     if (button && action === 'ban' && !button.classList.contains('armed')) {
-      button.classList.add('armed'); button.textContent = 'Ban?';
-      setTimeout(function () { button.classList.remove('armed'); button.textContent = 'Ban'; }, 3000);
+      button.classList.add('armed'); button.dataset.tip = 'Click again to ban';
+      setTimeout(function () { button.classList.remove('armed'); button.dataset.tip = 'Ban'; }, 3000);
       return;
     }
     rpc('chat_mod', {p_action: action, p_target: target, p_minutes: minutes || null}).then(function (r) {
@@ -1395,6 +1409,20 @@ main.dash { margin: 0 auto; }
   }
   function chatMentionTitle(m) { return m.name + (m.reply_to ? ' replied to you' : ' mentioned you'); }
   function chatMentionBody(m) { return chatEmojify(m.body || '') || (m.file_name ? 'Sent ' + m.file_name : 'Sent an attachment'); }
+  // ── the hover toolbar on a message: icon buttons with a tooltip (like Discord) ──
+  var CHAT_TOOL_ICONS = {
+    'Reply': '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5 5.5 5.5 0 0 1-5.5 5.5H11"/>',
+    'Delete': '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/>',
+    'Mute 10 min': '<path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><line x1="22" x2="16" y1="9" y2="15"/><line x1="16" x2="22" y1="9" y2="15"/>',
+    'Ban': '<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>'
+  };
+  function chatIconTool(b, label) {
+    var path = CHAT_TOOL_ICONS[label];
+    b.dataset.tip = label; b.setAttribute('aria-label', label); b.classList.add('chat-icon-tool');
+    if (!path) { b.textContent = label; return b; }
+    b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + path + '</svg>';
+    return b;
+  }
   // ── who said what: a coloured initial per person, and names shown whenever the speaker changes ──
   function chatHue(key) {
     var h = 2166136261, s = String(key || '');
