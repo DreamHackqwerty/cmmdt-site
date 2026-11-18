@@ -2202,7 +2202,12 @@ function render(m) {
       (r.removed || []).forEach(function (id) { var el = log.querySelector('[data-id="' + id + '"]'); if (el) el.remove(); });
       var fresh = 0;
       (r.messages || []).forEach(function (m) {
-        if (m.id <= st.after) return;
+        if (m.id <= st.after) {
+          // an older message coming back: an image the AI filter has just let through
+          var had = log.querySelector('[data-id="' + m.id + '"]');
+          if (!m.held && (!had || had.classList.contains('held'))) render(m);
+          return;
+        }
         render(m); st.after = m.id;
         if (!(st.me && ((m.key && m.key === st.me.key) || m.author === st.me.id))) fresh++;
       });
