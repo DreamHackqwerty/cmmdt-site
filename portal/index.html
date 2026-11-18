@@ -649,6 +649,11 @@ main.dash { margin: 0 auto; }
 .chat-pcard { max-width: 200px; }
 @media (max-width: 640px) { .chat-card { height: calc(100vh - 150px); } }
 
+/* @mention count on the Global chat link */
+.side-nav a .mention-count { margin-left: auto; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; display: inline-grid; place-items: center;
+  background: #f23f43; color: #fff; font-size: 11px; font-weight: 700; line-height: 1; font-style: normal; }
+.side-nav a .mention-count[hidden] { display: none; }
+
 </style>
 </head>
 <body>
@@ -726,7 +731,7 @@ main.dash { margin: 0 auto; }
         <a href="#activity" data-tab="activity"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12c.552 0 1.005-.449.95-.998a10 10 0 0 0-8.953-8.951c-.55-.055-.998.398-.998.95v8a1 1 0 0 0 1 1z"/><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/></svg>Utilities and hunts</a>
         <a href="#hours" data-tab="hours"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18M3 15h18"/></svg>Hour by hour</a>
         <a href="#catches" data-tab="catches"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 12c.94-3.46 4.94-6 8.5-6 3.56 0 6.06 2.54 7 6-.94 3.47-3.44 6-7 6s-7.56-2.53-8.5-6Z"/><path d="M18 12v.5M16 17.93a9.77 9.77 0 0 1 0-11.86M7 10.67C7 8 5.58 5.97 2.73 5.5c-1 1.5-1 5 .23 6.5-1.24 1.5-1.24 5-.23 6.5C5.58 18.03 7 16 7 13.33"/></svg>Catches</a>
-        <a href="#chat" data-tab="chat"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719"/><path d="M8 12h.01M12 12h.01M16 12h.01"/></svg>Global chat<i class="unread" id="chat-unread" hidden></i></a>
+        <a href="#chat" data-tab="chat"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719"/><path d="M8 12h.01M12 12h.01M16 12h.01"/></svg>Global chat<i class="unread" id="chat-unread" hidden></i><b class="mention-count" id="chat-mention-count" hidden></b></a>
         <p class="side-group">CMMDT</p>
         <a href="/"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>Home</a>
         <a href="/products"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>Products</a>
@@ -1094,7 +1099,36 @@ main.dash { margin: 0 auto; }
       return r.data || {ok: false, error: 'Chat is offline.'};
     }, function () { return {ok: false, error: 'Chat is offline. Check your connection.'}; });
   }
-  function setUnread(n) { st.unread = n; $('chat-unread').hidden = !(n > 0); }
+  function setUnread(n) { st.unread = n; $('chat-unread').hidden = !(n > 0) || st.mentions > 0; }
+  // @mentions and replies to you: a red count on Global chat, in the tab title and on the tab's icon (like Discord)
+  st.mentions = 0;
+  var baseTitle = document.title, iconLink = document.querySelector('link[rel="icon"]'), baseIcon = iconLink && iconLink.href, iconImg = null;
+  function setMentions(n) {
+    st.mentions = n;
+    var badge = $('chat-mention-count');
+    badge.hidden = !(n > 0); badge.textContent = n > 99 ? '99+' : String(n);
+    $('chat-unread').hidden = !(st.unread > 0) || n > 0;
+    document.title = (n > 0 ? '(' + (n > 99 ? '99+' : n) + ') ' : '') + baseTitle;
+    if (!iconLink || !baseIcon) return;
+    if (!(n > 0)) { iconLink.href = baseIcon; return; }
+    function draw() {
+      try {
+        var c = document.createElement('canvas'); c.width = c.height = 64;
+        var g = c.getContext('2d');
+        g.drawImage(iconImg, 0, 0, 64, 64);
+        var label = n > 9 ? '9+' : String(n);
+        g.beginPath(); g.arc(46, 46, 18, 0, Math.PI * 2); g.fillStyle = '#f23f43'; g.fill();
+        g.lineWidth = 4; g.strokeStyle = '#0d0f14'; g.stroke();
+        g.fillStyle = '#fff'; g.font = 'bold ' + (label.length > 1 ? 20 : 24) + 'px system-ui, sans-serif';
+        g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(label, 46, 47);
+        iconLink.href = c.toDataURL('image/png');
+      } catch (e) {}
+    }
+    if (iconImg && iconImg.complete) draw();
+    else { iconImg = new Image(); iconImg.onload = draw; iconImg.src = baseIcon; }
+  }
+  function seeingChat() { return st.active && !document.hidden && document.hasFocus(); }
+  window.addEventListener('focus', function () { if (seeingChat()) setMentions(0); });
   function showJoin(show, rename) {
     $('chat-join').hidden = !show;
     $('chat-compose').hidden = show || !st.joined;
@@ -1324,6 +1358,36 @@ main.dash { margin: 0 auto; }
     }
     return 'Done.';
   }
+  // ── the mention ping: a short two-note chime, made on the spot (no sound file) ──
+  var chatAudio = null;
+  function chatAudioUnlock() {
+    // browsers only allow sound after the first click or key press
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      chatAudio = chatAudio || new AC();
+      if (chatAudio.state === 'suspended') chatAudio.resume();
+    } catch (e) { chatAudio = null; }
+    return chatAudio;
+  }
+  ['pointerdown', 'keydown'].forEach(function(ev) { document.addEventListener(ev, chatAudioUnlock, {once: true, capture: true}); });
+  function chatPing() {
+    var ac = chatAudioUnlock(); if (!ac) return;
+    try {
+      var t = ac.currentTime + 0.01;
+      [[987.8, 0], [1318.5, 0.11]].forEach(function(n) {
+        var o = ac.createOscillator(), g = ac.createGain();
+        o.type = 'sine'; o.frequency.value = n[0];
+        g.gain.setValueAtTime(0.0001, t + n[1]);
+        g.gain.exponentialRampToValueAtTime(0.16, t + n[1] + 0.012);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + n[1] + 0.42);
+        o.connect(g); g.connect(ac.destination);
+        o.start(t + n[1]); o.stop(t + n[1] + 0.45);
+      });
+    } catch (e) {}
+  }
+  function chatMentionTitle(m) { return m.name + (m.reply_to ? ' replied to you' : ' mentioned you'); }
+  function chatMentionBody(m) { return chatEmojify(m.body || '') || (m.file_name ? 'Sent ' + m.file_name : 'Sent an attachment'); }
   // ── who said what: a coloured initial per person, and names shown whenever the speaker changes ──
   function chatHue(key) {
     var h = 2166136261, s = String(key || '');
@@ -1510,7 +1574,7 @@ function render(m) {
       var near = log.scrollHeight - log.scrollTop - log.clientHeight < 60;
       (r.removed || []).forEach(function (id) { var el = log.querySelector('[data-id="' + id + '"]'); if (el) el.remove(); });
       chatRegroup(log);
-      var fresh = 0;
+      var fresh = 0, pings = 0;
       (r.messages || []).forEach(function (m) {
         if (m.id <= st.after) {
           // an older message coming back: an image the AI filter has just let through
@@ -1520,7 +1584,9 @@ function render(m) {
         }
         render(m); st.after = m.id;
         if (!(st.me && ((m.key && m.key === st.me.key) || m.author === st.me.id))) fresh++;
+        if (!first) { var mr = log.querySelector('[data-id="' + m.id + '"]'); if (mr && mr.classList.contains('mentioned')) pings++; }
       });
+      if (pings && !seeingChat()) { chatPing(); setMentions(st.mentions + pings); }
       if (first && empty && empty.isConnected) empty.textContent = 'No messages yet. Say hi!';
       if (fresh && !first && !st.active) setUnread(st.unread + fresh);
       if (first || near) log.scrollTop = log.scrollHeight;
@@ -1552,7 +1618,7 @@ function render(m) {
     } catch (e) { st.live = false; }
   }
   function opened() {
-    st.active = true; setUnread(0);
+    st.active = true; setUnread(0); if (!document.hidden) setMentions(0);
     if (!st.started) start(); else poll().then(schedule);
     log.scrollTop = log.scrollHeight;
     if (st.joined) setTimeout(function () { $('chat-input').focus(); }, 60);
@@ -1562,7 +1628,13 @@ function render(m) {
     if (on && !st.active) opened();
     else if (!on && st.active) { st.active = false; schedule(); }
   }).observe(panel, {attributes: true, attributeFilter: ['hidden']});
-  document.addEventListener('visibilitychange', function () { if (st.started) schedule(); });
+  document.addEventListener('visibilitychange', function () { if (st.started) schedule(); if (seeingChat()) setMentions(0); });
+  // listen for mentions from any tab of the dashboard, not only once Global chat is opened
+  var bgStart = setInterval(function () {
+    if (st.started) { clearInterval(bgStart); return; }
+    var dash = $('view-dashboard');
+    if (sb() && dash && dash.classList.contains('on') && !dash.hidden) { clearInterval(bgStart); start(); }
+  }, 3000);
 
   $('chat-join').addEventListener('submit', function (e) {
     e.preventDefault();
